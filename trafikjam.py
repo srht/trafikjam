@@ -112,14 +112,17 @@ def send_telegram(cfg: Config, text: str) -> None:
         json={"chat_id": cfg.telegram_chat_id, "text": text},
         timeout=15,
     )
-    r.raise_for_status()
+    if not r.ok:
+        try:
+            desc = r.json().get("description", "")
+        except ValueError:
+            desc = r.text[:100]
+        raise RuntimeError(f"Telegram {r.status_code}: {desc}")
 
 
 def should_notify(prev: str | None, cur: str) -> bool:
-    """Sadece durum değişince haber ver; ilk ölçümde yalnızca sorun varsa bildir."""
-    if prev is None:
-        return cur != AKICI
-    return prev != cur
+    """İlk ölçümde (başlangıç/konum değişimi) her zaman, sonra yalnızca durum değişince haber ver."""
+    return prev is None or prev != cur
 
 
 class Monitor:
@@ -180,9 +183,17 @@ class Monitor:
                 if (cfg.lat, cfg.lon) != (self.cfg.lat, self.cfg.lon):
                     return  # ölçüm sırasında konum değişti, sonucu at
                 notify = should_notify(self.prev, level)
-                self.prev, self.last = level, last
+                self.last = last
             if notify:
-                send_telegram(cfg, format_message(cfg, level, flow))
+                try:
+                    send_telegram(cfg, format_message(cfg, level, flow))
+                except Exception as e:
+                    log.error("Telegram gönderilemedi: %s", e)
+                    with self.lock:
+                        self.last = {**last, "notify_error": str(e)[:200]}
+                    return  # prev değişmedi: bir sonraki periyotta tekrar denenir
+            with self.lock:
+                self.prev = level
         except Exception as e:
             log.exception("Kontrol başarısız, bir sonraki periyotta tekrar denenecek")
             with self.lock:

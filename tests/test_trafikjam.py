@@ -15,7 +15,7 @@ def test_classify():
 
 
 def test_should_notify():
-    assert not t.should_notify(None, t.AKICI)
+    assert t.should_notify(None, t.AKICI)
     assert t.should_notify(None, t.YOGUN)
     assert not t.should_notify(t.YOGUN, t.YOGUN)
     assert t.should_notify(t.YOGUN, t.AKICI)
@@ -42,3 +42,23 @@ def test_set_location_rejects_invalid(tmp_path):
                            telegram_chat_id="1", state_path=str(tmp_path / "s.json")))
     with pytest.raises(ValueError):
         m.set_location(91, 0)
+
+
+def test_telegram_failure_is_surfaced_and_retried(tmp_path, monkeypatch):
+    cfg = t.Config(lat=1, lon=2, tomtom_key="k", telegram_token="x",
+                   telegram_chat_id="1", state_path=str(tmp_path / "s.json"))
+    m = t.Monitor(cfg)
+    monkeypatch.setattr(t, "fetch_flow", lambda c: flow(90))
+    sent = []
+
+    def boom(c, text):
+        raise RuntimeError("Telegram 400: chat not found")
+
+    monkeypatch.setattr(t, "send_telegram", boom)
+    m.check_once()
+    assert "chat not found" in m.last["notify_error"] and m.prev is None
+    monkeypatch.setattr(t, "send_telegram", lambda c, text: sent.append(text))
+    m.check_once()
+    assert len(sent) == 1 and m.prev == t.AKICI
+    m.check_once()
+    assert len(sent) == 1  # durum değişmedi, tekrar gönderilmez

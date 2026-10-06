@@ -17,7 +17,7 @@
   button { padding:8px 16px; border:0; border-radius:6px; background:#2563eb; color:#fff; font:inherit; cursor:pointer; }
   button:disabled { opacity:.5; cursor:default; }
   #status { font-weight:600; }
-  .muted { color:var(--muted); font-size:13px; }
+  .muted { color:var(--muted); font-size:13px; white-space:pre-line; }
 </style>
 </head>
 <body>
@@ -75,6 +75,7 @@ function render(s, recenter) {
     $('status').textContent = `${ICON[l.level]} ${l.label} — ${title}`;
     $('detail').textContent = `${Math.round(l.current_speed)} km/s (normalde ${Math.round(l.free_flow_speed)}) · ` +
       `~${Math.floor(l.delay_s/60)} dk gecikme · ${s.interval/60} dk'da bir kontrol · ${new Date(l.checked_at).toLocaleTimeString('tr-TR')}`;
+    if (l.notify_error) $('detail').textContent += `\n⚠️ Telegram mesajı gönderilemedi: ${l.notify_error}`;
   }
 }
 

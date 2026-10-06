@@ -13,7 +13,7 @@ python trafikjam.py          # sürekli çalış
 
 ## Nasıl çalışır
 - `güncel hız / serbest akış hızı` oranı hesaplanır: `< 0.40` sıkışık, `< 0.70` yoğunlaşıyor, aksi halde akıcı.
-- Spam olmaması için yalnızca durum değiştiğinde bildirim atılır.
+- İlk ölçümde (başlangıç veya konum değişimi) her zaman, sonra yalnızca durum değiştiğinde bildirim atılır. Telegram hatası arayüzde görünür ve sonraki periyotta tekrar denenir.
 - API hatası olursa log'lanır ve bir sonraki periyotta tekrar denenir.
 
 Test: `pytest`
