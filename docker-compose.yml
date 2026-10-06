@@ -1,0 +1,22 @@
+services:
+  trafikjam:
+    build: .
+    restart: unless-stopped
+    environment:
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?ADMIN_PASSWORD gerekli}
+      TOMTOM_API_KEY: ${TOMTOM_API_KEY:?TOMTOM_API_KEY gerekli}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:?TELEGRAM_BOT_TOKEN gerekli}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:?TELEGRAM_CHAT_ID gerekli}
+      CHECK_INTERVAL_SECONDS: ${CHECK_INTERVAL_SECONDS:-300}
+      YOGUN_ESIK: ${YOGUN_ESIK:-0.40}
+      ORTA_ESIK: ${ORTA_ESIK:-0.70}
+      TRAFIK_LAT: ${TRAFIK_LAT:-}
+      TRAFIK_LON: ${TRAFIK_LON:-}
+      TRAFIK_NAME: ${TRAFIK_NAME:-}
+    volumes:
+      - trafikjam-data:/data
+    expose:
+      - "8000"
+
+volumes:
+  trafikjam-data:

@@ -31,3 +31,10 @@ Konum seçilmemişse izleme başlamaz. `TRAFIK_LAT/LON` env değerleri yalnızca
 4. **Advanced → Volumes**: bir volume'ü `/data` yoluna bağla (seçilen konum redeploy'da kaybolmasın).
 5. **Domains**: domain ekle, container port `8000`, HTTPS'i aç (şifre açık metin gitmesin).
 6. Deploy et, domain'i aç, haritadan noktayı seç. Logs'ta `... akici (xx/yy km/s)` satırları görünür.
+
+### Docker Compose ile
+`docker-compose.yml` hazır. Dokploy'da **Compose** servisi oluşturup repoyu bağla (Compose Type: Docker Compose),
+Environment sekmesine yukarıdaki değişkenleri gir, **Domains** kısmında servis `trafikjam`, port `8000` seç.
+`/data` volume'ü (`trafikjam-data`) compose içinde tanımlı, ayrıca eklemen gerekmez.
+Yerelde denemek için `.env` doldurup `docker compose up -d --build`; port yayınlamadığı için
+yerelde bakmak istersen `ports: ["8000:8000"]` ekle.
