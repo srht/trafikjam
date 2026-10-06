@@ -120,11 +120,6 @@ def send_telegram(cfg: Config, text: str) -> None:
         raise RuntimeError(f"Telegram {r.status_code}: {desc}")
 
 
-def should_notify(prev: str | None, cur: str) -> bool:
-    """İlk ölçümde (başlangıç/konum değişimi) her zaman, sonra yalnızca durum değişince haber ver."""
-    return prev is None or prev != cur
-
-
 class Monitor:
     """Seçili noktayı periyodik kontrol eder; konum çalışırken değiştirilebilir."""
 
@@ -132,7 +127,6 @@ class Monitor:
         self.cfg = cfg
         self.lock = threading.Lock()
         self.wake = threading.Event()
-        self.prev: str | None = None
         self.last: dict | None = None
         self._load_state()
 
@@ -149,7 +143,7 @@ class Monitor:
             raise ValueError("Geçersiz koordinat")
         with self.lock:
             self.cfg.lat, self.cfg.lon, self.cfg.name = lat, lon, name.strip()[:80]
-            self.prev, self.last = None, None
+            self.last = None
             os.makedirs(os.path.dirname(self.cfg.state_path) or ".", exist_ok=True)
             with open(self.cfg.state_path, "w") as f:
                 json.dump({"lat": lat, "lon": lon, "name": self.cfg.name}, f)
@@ -182,18 +176,13 @@ class Monitor:
             with self.lock:
                 if (cfg.lat, cfg.lon) != (self.cfg.lat, self.cfg.lon):
                     return  # ölçüm sırasında konum değişti, sonucu at
-                notify = should_notify(self.prev, level)
                 self.last = last
-            if notify:
-                try:
-                    send_telegram(cfg, format_message(cfg, level, flow))
-                except Exception as e:
-                    log.error("Telegram gönderilemedi: %s", e)
-                    with self.lock:
-                        self.last = {**last, "notify_error": str(e)[:200]}
-                    return  # prev değişmedi: bir sonraki periyotta tekrar denenir
-            with self.lock:
-                self.prev = level
+            try:
+                send_telegram(cfg, format_message(cfg, level, flow))
+            except Exception as e:
+                log.error("Telegram gönderilemedi: %s", e)
+                with self.lock:
+                    self.last = {**last, "notify_error": str(e)[:200]}
         except Exception as e:
             log.exception("Kontrol başarısız, bir sonraki periyotta tekrar denenecek")
             with self.lock:

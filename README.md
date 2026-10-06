@@ -1,7 +1,7 @@
 # trafikjam
 
 Belirli bir koordinattaki trafiği periyodik olarak TomTom Traffic API ile kontrol eder,
-durum değişince (akıcı → yoğun vb.) Telegram'dan haber verir.
+her kontrolde Telegram'dan durumu (akıcı/yoğun/sıkışık) bildirir.
 
 ## Kurulum
 ```
@@ -13,7 +13,7 @@ python trafikjam.py          # sürekli çalış
 
 ## Nasıl çalışır
 - `güncel hız / serbest akış hızı` oranı hesaplanır: `< 0.40` sıkışık, `< 0.70` yoğunlaşıyor, aksi halde akıcı.
-- İlk ölçümde (başlangıç veya konum değişimi) her zaman, sonra yalnızca durum değiştiğinde bildirim atılır. Telegram hatası arayüzde görünür ve sonraki periyotta tekrar denenir.
+- Her kontrolde (varsayılan 5 dk) oranına bakılmaksızın Telegram'a durum mesajı gönderilir. Telegram hatası arayüzde görünür.
 - API hatası olursa log'lanır ve bir sonraki periyotta tekrar denenir.
 
 Test: `pytest`
