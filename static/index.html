@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Trafik Jam</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+  :root { --bg:#fff; --fg:#1a1a1a; --card:#f4f4f6; --muted:#666; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#16161a; --fg:#eee; --card:#24242b; --muted:#9a9aa5; } }
+  * { box-sizing: border-box; }
+  body { margin:0; font:15px system-ui,sans-serif; background:var(--bg); color:var(--fg); display:flex; flex-direction:column; height:100dvh; }
+  #map { flex:1; min-height:200px; }
+  .panel { padding:12px 16px; background:var(--card); display:grid; gap:8px; }
+  .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+  input { flex:1; min-width:120px; padding:8px; border:1px solid #8885; border-radius:6px; background:var(--bg); color:var(--fg); font:inherit; }
+  button { padding:8px 16px; border:0; border-radius:6px; background:#2563eb; color:#fff; font:inherit; cursor:pointer; }
+  button:disabled { opacity:.5; cursor:default; }
+  #status { font-weight:600; }
+  .muted { color:var(--muted); font-size:13px; }
+</style>
+</head>
+<body>
+<div id="map"></div>
+<div class="panel">
+  <div id="status">Yükleniyor…</div>
+  <div class="muted" id="detail"></div>
+  <div class="row">
+    <input id="name" placeholder="Nokta adı (isteğe bağlı)" maxlength="80">
+    <button id="save" disabled>Bu noktayı izle</button>
+  </div>
+  <div class="muted">Haritaya tıklayarak izlenecek noktayı seç. Yolun üzerine tıkla.</div>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+const map = L.map('map').setView([41.015, 28.979], 11);
+L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  maxZoom: 19, attribution: '&copy; OpenStreetMap'
+}).addTo(map);
+
+const $ = id => document.getElementById(id);
+let pick = null, marker = null, saved = null;
+const ICON = {akici:'🟢', orta:'🟡', yogun:'🔴', kapali:'⛔'};
+
+function place(lat, lon) {
+  if (marker) marker.setLatLng([lat, lon]); else marker = L.marker([lat, lon]).addTo(map);
+}
+
+map.on('click', e => {
+  pick = {lat: +e.latlng.lat.toFixed(6), lon: +e.latlng.lng.toFixed(6)};
+  place(pick.lat, pick.lon);
+  $('save').disabled = false;
+});
+
+$('save').onclick = async () => {
+  $('save').disabled = true;
+  const r = await fetch('/api/location', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({...pick, name: $('name').value})
+  });
+  if (!r.ok) { $('status').textContent = 'Kaydedilemedi: ' + ((await r.json()).error || r.status); return; }
+  pick = null; render(await r.json(), true);
+  setTimeout(refresh, 3000);
+};
+
+function render(s, recenter) {
+  if (s.lat == null) { $('status').textContent = 'Henüz nokta seçilmedi'; return; }
+  saved = s; place(s.lat, s.lon);
+  if (recenter) map.setView([s.lat, s.lon], 15);
+  const title = s.name || `${s.lat.toFixed(4)}, ${s.lon.toFixed(4)}`;
+  const l = s.last;
+  if (!l) { $('status').textContent = `İzleniyor: ${title}`; $('detail').textContent = 'İlk ölçüm bekleniyor…'; }
+  else if (l.error) { $('status').textContent = `${title}: ölçüm hatası`; $('detail').textContent = l.error; }
+  else {
+    $('status').textContent = `${ICON[l.level]} ${l.label} — ${title}`;
+    $('detail').textContent = `${Math.round(l.current_speed)} km/s (normalde ${Math.round(l.free_flow_speed)}) · ` +
+      `~${Math.floor(l.delay_s/60)} dk gecikme · ${s.interval/60} dk'da bir kontrol · ${new Date(l.checked_at).toLocaleTimeString('tr-TR')}`;
+  }
+}
+
+async function refresh() {
+  try { render(await (await fetch('/api/status')).json(), !saved); } catch (e) {}
+}
+refresh(); setInterval(refresh, 30000);
+</script>
+</body>
+</html>
