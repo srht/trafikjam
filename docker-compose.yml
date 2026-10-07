@@ -3,19 +3,15 @@ services:
     build: .
     restart: unless-stopped
     environment:
-      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?ADMIN_PASSWORD gerekli}
       TOMTOM_API_KEY: ${TOMTOM_API_KEY:?TOMTOM_API_KEY gerekli}
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:?TELEGRAM_BOT_TOKEN gerekli}
-      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:?TELEGRAM_CHAT_ID gerekli}
+      SECRET_KEY: ${SECRET_KEY:-}
+      REGISTRATION_CODE: ${REGISTRATION_CODE:-}
+      MAX_POINTS_PER_USER: ${MAX_POINTS_PER_USER:-5}
+      COOKIE_SECURE: ${COOKIE_SECURE:-1}
       CHECK_INTERVAL_SECONDS: ${CHECK_INTERVAL_SECONDS:-300}
       YOGUN_ESIK: ${YOGUN_ESIK:-0.40}
       ORTA_ESIK: ${ORTA_ESIK:-0.70}
-      TRAFIK_LAT: ${TRAFIK_LAT:-}
-      TRAFIK_LON: ${TRAFIK_LON:-}
-      TRAFIK_NAME: ${TRAFIK_NAME:-}
-      NOTIFY_START: ${NOTIFY_START:-}
-      NOTIFY_END: ${NOTIFY_END:-}
-      NOTIFY_DAYS: ${NOTIFY_DAYS:-}
       TIMEZONE: ${TIMEZONE:-Europe/Istanbul}
     volumes:
       - trafikjam-data:/data

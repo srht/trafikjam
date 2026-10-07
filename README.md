@@ -1,44 +1,39 @@
 # trafikjam
 
-Belirli bir koordinattaki trafiği periyodik olarak TomTom Traffic API ile kontrol eder,
-her kontrolde Telegram'dan durumu (akıcı/yoğun/sıkışık) bildirir.
+Kullanıcıların kayıt olup haritadan izlemek istedikleri yolları seçtiği, her noktanın trafiğini
+TomTom Traffic API ile periyodik ölçüp sahibine Telegram'dan bildiren web uygulaması.
 
-## Kurulum
+- Kullanıcı adı + şifreyle kayıt/giriş. Herkes yalnızca **kendi** noktalarını görür ve yönetir.
+- Her kullanıcı kendi Telegram chat id'sini girer; bildirimler kendi chat'ine gider (panelde "Test" butonu var).
+- Her nokta için ayrı bildirim saat aralığı ve gün seçimi. Aralık dışında ölçüm de mesaj da yapılmaz.
+- Her ölçümde (varsayılan 5 dk) trafik oranına bakılmaksızın durum mesajı gönderilir.
+- Sınıflandırma: `güncel hız / serbest akış hızı` `< 0.40` sıkışık, `< 0.70` yoğunlaşıyor, aksi halde akıcı.
+
+## Yerelde çalıştırma
 ```
 pip install -r requirements.txt
-cp .env.example .env   # değerleri doldur
-python trafikjam.py --once   # tek ölçüm, bildirim göndermez
-python trafikjam.py          # sürekli çalış
+cp .env.example .env   # TOMTOM_API_KEY, TELEGRAM_BOT_TOKEN doldur; yerelde COOKIE_SECURE=0 yap
+python web.py          # http://localhost:8000
+pytest
 ```
 
-## Nasıl çalışır
-- `güncel hız / serbest akış hızı` oranı hesaplanır: `< 0.40` sıkışık, `< 0.70` yoğunlaşıyor, aksi halde akıcı.
-- Her kontrolde (varsayılan 5 dk) oranına bakılmaksızın Telegram'a durum mesajı gönderilir. Telegram hatası arayüzde görünür.
-- API hatası olursa log'lanır ve bir sonraki periyotta tekrar denenir.
-
-Test: `pytest`
-
-## Web arayüzü (haritadan konum seçimi)
-`python web.py` çalıştırıp `http://localhost:8000` adresini aç (`ADMIN_PASSWORD` ile basic auth; kullanıcı adı önemsiz).
-Haritaya tıkla, isteğe bağlı bir ad yaz, **Bu noktayı izle**'ye bas. Konum `STATE_PATH` dosyasına
-kaydedilir ve hemen ölçülür; sayfa mevcut durumu (hız, gecikme, son ölçüm) 30 sn'de bir yeniler.
-**Bildirim saatleri:** panelde "Bildirim saatleri" bölümünden başlangıç/bitiş saati ve günleri seçip kaydet
-(ör. 07:00–10:00, Pzt–Cum). Aralık dışında ölçüm de mesaj da yapılmaz, TomTom kotası harcanmaz.
-Gece aşan aralık (22:00–06:00) olur; "Her zaman" ile sınırı kaldırırsın. Saat dilimi `TIMEZONE` (varsayılan `Europe/Istanbul`).
-Başlangıç değerleri `NOTIFY_START`, `NOTIFY_END`, `NOTIFY_DAYS` env'leriyle de verilebilir; arayüzden kaydedilen değer onları geçersiz kılar.
-Konum seçilmemişse izleme başlamaz. `TRAFIK_LAT/LON` env değerleri yalnızca başlangıç noktasıdır.
+## Güvenlik notları
+- Şifreler hash'li saklanır (werkzeug), oturum imzalı HttpOnly/SameSite çerezdir; HTTPS arkasında `Secure` işaretlenir.
+- Çok sayıda hatalı girişte 15 dk bloklanır; kayıt IP başına saatte 10 denemeyle sınırlıdır.
+- **Kayıt varsayılan olarak herkese açıktır.** TomTom kotası tüm kullanıcılar arasında ortaktır;
+  yalnızca tanıdıklarının kullanması için `REGISTRATION_CODE` ayarla (davet kodu sorulur),
+  kullanıcı başı nokta limitini `MAX_POINTS_PER_USER` ile sınırla.
+- Kota hesabı: toplam nokta × (86400 / `CHECK_INTERVAL_SECONDS`) ≤ ~2500/gün (ücretsiz katman).
 
 ## Dokploy ile yayınlama
-1. Dokploy'da **Application** oluştur, bu repoyu ve branch'i bağla.
-2. Build Type: **Dockerfile** (yol: `Dockerfile`).
-3. **Environment**: `ADMIN_PASSWORD`, `TOMTOM_API_KEY`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` zorunlu.
-4. **Advanced → Volumes**: bir volume'ü `/data` yoluna bağla (seçilen konum redeploy'da kaybolmasın).
-5. **Domains**: domain ekle, container port `8000`, HTTPS'i aç (şifre açık metin gitmesin).
-6. Deploy et, domain'i aç, haritadan noktayı seç. Logs'ta `... akici (xx/yy km/s)` satırları görünür.
+**Dockerfile ile:** Application oluştur, repoyu ve `main` branch'ini bağla, Build Type: Dockerfile.
+**Compose ile:** Compose servisi oluştur (Docker Compose), aynı repo/branch.
 
-### Docker Compose ile
-`docker-compose.yml` hazır. Dokploy'da **Compose** servisi oluşturup repoyu bağla (Compose Type: Docker Compose),
-Environment sekmesine yukarıdaki değişkenleri gir, **Domains** kısmında servis `trafikjam`, port `8000` seç.
-`/data` volume'ü (`trafikjam-data`) compose içinde tanımlı, ayrıca eklemen gerekmez.
-Yerelde denemek için `.env` doldurup `docker compose up -d --build`; port yayınlamadığı için
-yerelde bakmak istersen `ports: ["8000:8000"]` ekle.
+1. Environment: `TOMTOM_API_KEY`, `TELEGRAM_BOT_TOKEN` zorunlu; önerilen: `REGISTRATION_CODE`.
+2. Dockerfile ile kurarsan Advanced → Volumes'te bir volume'ü `/data`'ya bağla (veritabanı ve oturum anahtarı burada;
+   compose'ta `trafikjam-data` hazır tanımlı).
+3. Domains: domain ekle, container port `8000`, HTTPS açık.
+4. Deploy et, domain'i aç, kayıt ol, Telegram chat id'ni gir, haritadan nokta ekle.
+
+> Eski tek kullanıcılı sürümden geçiş: `ADMIN_PASSWORD`, `TRAFIK_LAT/LON/NAME`, `NOTIFY_*`, `STATE_PATH` artık kullanılmıyor,
+> eski `state.json`'daki nokta taşınmaz; kayıt olup noktayı yeniden ekle.

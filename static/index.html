@@ -6,126 +6,274 @@
 <title>Trafik Jam</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <style>
-  :root { --bg:#fff; --fg:#1a1a1a; --card:#f4f4f6; --muted:#666; }
+  :root { --bg:#fff; --fg:#1a1a1a; --card:#f4f4f6; --muted:#666; --line:#8883; --accent:#2563eb; --danger:#c0392b; }
   @media (prefers-color-scheme: dark) { :root { --bg:#16161a; --fg:#eee; --card:#24242b; --muted:#9a9aa5; } }
   * { box-sizing: border-box; }
-  body { margin:0; font:15px system-ui,sans-serif; background:var(--bg); color:var(--fg); display:flex; flex-direction:column; height:100dvh; }
-  #map { flex:1; min-height:200px; }
-  .panel { padding:12px 16px; background:var(--card); display:grid; gap:8px; }
-  .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
-  input { flex:1; min-width:120px; padding:8px; border:1px solid #8885; border-radius:6px; background:var(--bg); color:var(--fg); font:inherit; }
-  button { padding:8px 16px; border:0; border-radius:6px; background:#2563eb; color:#fff; font:inherit; cursor:pointer; }
+  [hidden] { display:none !important; }
+  body { margin:0; font:15px system-ui,sans-serif; background:var(--bg); color:var(--fg); height:100dvh; }
+  input { padding:8px; border:1px solid #8885; border-radius:6px; background:var(--bg); color:var(--fg); font:inherit; min-width:0; }
+  button { padding:8px 14px; border:0; border-radius:6px; background:var(--accent); color:#fff; font:inherit; cursor:pointer; }
+  button.ghost { background:transparent; color:var(--fg); border:1px solid var(--line); }
+  button.danger { background:var(--danger); }
   button:disabled { opacity:.5; cursor:default; }
-  #status { font-weight:600; }
-  details summary { cursor:pointer; font-weight:600; }
-  label { display:flex; gap:6px; align-items:center; }
-  .muted { color:var(--muted); font-size:13px; white-space:pre-line; }
+  .muted { color:var(--muted); font-size:13px; }
+  .err { color:var(--danger); font-size:13px; min-height:1.2em; }
+  .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+  .row > input:not([type=checkbox]):not([type=time]) { flex:1; }
+
+  #auth { display:grid; place-items:center; height:100%; padding:16px; }
+  #auth .box { width:100%; max-width:340px; background:var(--card); padding:24px; border-radius:12px; display:grid; gap:12px; }
+  #auth h1 { margin:0; font-size:22px; }
+  .tabs { display:flex; gap:4px; }
+  .tabs button { flex:1; }
+  .tabs button:not(.on) { background:transparent; color:var(--fg); border:1px solid var(--line); }
+
+  #app { display:grid; grid-template-columns:1fr 380px; height:100%; }
+  #map { min-height:200px; }
+  aside { overflow-y:auto; padding:12px 16px; background:var(--card); display:grid; gap:14px; align-content:start; }
+  aside h2 { margin:0 0 6px; font-size:15px; }
+  .top { display:flex; justify-content:space-between; align-items:center; }
+  .point { background:var(--bg); border-radius:8px; padding:10px; display:grid; gap:6px; }
+  .point .title { font-weight:600; cursor:pointer; }
+  .point .actions { display:flex; gap:6px; }
+  .point .actions button { padding:4px 10px; font-size:13px; }
+  label { display:flex; gap:4px; align-items:center; }
+  .sched { display:grid; gap:8px; margin-top:6px; }
+  @media (max-width:760px) {
+    #app { grid-template-columns:1fr; grid-template-rows:40vh 1fr; }
+  }
 </style>
 </head>
 <body>
-<div id="map"></div>
-<div class="panel">
-  <div id="status">Yükleniyor…</div>
-  <div class="muted" id="detail"></div>
-  <div class="row">
-    <input id="name" placeholder="Nokta adı (isteğe bağlı)" maxlength="80">
-    <button id="save" disabled>Bu noktayı izle</button>
-  </div>
-  <details id="sched">
-    <summary>Bildirim saatleri</summary>
-    <div class="row" style="margin-top:8px">
-      <label>Başlangıç <input type="time" id="start"></label>
-      <label>Bitiş <input type="time" id="end"></label>
-    </div>
-    <div class="row" id="days" style="margin-top:8px"></div>
-    <div class="row" style="margin-top:8px">
-      <button id="saveSched">Saatleri kaydet</button>
-      <button id="clearSched" style="background:#666">Her zaman</button>
-    </div>
-    <div class="muted" id="schedInfo"></div>
-  </details>
-  <div class="muted">Haritaya tıklayarak izlenecek noktayı seç. Yolun üzerine tıkla.</div>
+
+<div id="auth" hidden>
+  <form class="box" id="authForm">
+    <h1>🚦 Trafik Jam</h1>
+    <div class="tabs"><button type="button" id="tabLogin" class="on">Giriş</button><button type="button" id="tabReg">Kayıt ol</button></div>
+    <input id="u" placeholder="Kullanıcı adı" autocomplete="username" required>
+    <input id="p" type="password" placeholder="Şifre (en az 8 karakter)" autocomplete="current-password" required>
+    <input id="code" placeholder="Davet kodu" hidden>
+    <div class="err" id="authErr"></div>
+    <button id="authBtn">Giriş yap</button>
+  </form>
 </div>
+
+<div id="app" hidden>
+  <div id="map"></div>
+  <aside>
+    <div class="top"><strong id="who"></strong><button class="ghost" id="logout">Çıkış</button></div>
+
+    <section>
+      <h2>Telegram bildirimi</h2>
+      <div class="row">
+        <input id="chat" placeholder="Telegram chat id" inputmode="numeric">
+        <button id="saveChat">Kaydet</button>
+        <button class="ghost" id="testChat">Test</button>
+      </div>
+      <div class="muted" id="chatMsg">Botuna Telegram'dan bir mesaj atmış olmalısın. Chat id'ni @userinfobot'tan öğrenebilirsin.</div>
+    </section>
+
+    <section id="addBox" hidden>
+      <h2>Yeni nokta</h2>
+      <div id="addForm"></div>
+    </section>
+    <div class="muted" id="hint">Haritaya tıklayarak izlenecek yolu seç (yolun üzerine tıkla).</div>
+
+    <section>
+      <h2>Noktalarım</h2>
+      <div id="points" style="display:grid;gap:8px"></div>
+    </section>
+  </aside>
+</div>
+
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script>
-const map = L.map('map').setView([41.015, 28.979], 11);
-L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-  maxZoom: 19, attribution: '&copy; OpenStreetMap'
-}).addTo(map);
-
 const $ = id => document.getElementById(id);
-let pick = null, marker = null, saved = null;
+const DAYS = ['Pzt','Sal','Çar','Per','Cum','Cmt','Paz'];
 const ICON = {akici:'🟢', orta:'🟡', yogun:'🔴', kapali:'⛔'};
+let cfg = {}, map, layer, pick = null, pickMarker = null, markers = {}, points = [], timer;
 
-function place(lat, lon) {
-  if (marker) marker.setLatLng([lat, lon]); else marker = L.marker([lat, lon]).addTo(map);
+// kullanıcı girdisi her zaman textContent ile basılır (XSS yok)
+function el(tag, props = {}, ...kids) {
+  const n = document.createElement(tag);
+  Object.assign(n, props);
+  kids.flat().forEach(k => n.append(k));
+  return n;
 }
 
-map.on('click', e => {
-  pick = {lat: +e.latlng.lat.toFixed(6), lon: +e.latlng.lng.toFixed(6)};
-  place(pick.lat, pick.lon);
-  $('save').disabled = false;
-});
+async function api(method, url, body) {
+  const r = await fetch(url, {method, headers:{'Content-Type':'application/json','X-Requested-With':'fetch'},
+    body: body === undefined ? undefined : JSON.stringify(body)});
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) {
+    if (r.status === 401 && url !== '/api/login') showAuth();
+    throw new Error(j.error || ('Hata ' + r.status));
+  }
+  return j;
+}
 
-$('save').onclick = async () => {
-  $('save').disabled = true;
-  const r = await fetch('/api/location', {
-    method: 'POST', headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({...pick, name: $('name').value})
+// ---------- giriş / kayıt ----------
+let mode = 'login';
+function setMode(m) {
+  mode = m;
+  $('tabLogin').classList.toggle('on', m === 'login');
+  $('tabReg').classList.toggle('on', m === 'reg');
+  $('authBtn').textContent = m === 'login' ? 'Giriş yap' : 'Kayıt ol';
+  $('code').hidden = !(m === 'reg' && cfg.registration_code_required);
+  $('p').autocomplete = m === 'login' ? 'current-password' : 'new-password';
+  $('authErr').textContent = '';
+}
+$('tabLogin').onclick = () => setMode('login');
+$('tabReg').onclick = () => setMode('reg');
+$('authForm').onsubmit = async e => {
+  e.preventDefault();
+  $('authBtn').disabled = true;
+  try {
+    await api('POST', mode === 'login' ? '/api/login' : '/api/register',
+      {username: $('u').value, password: $('p').value, code: $('code').value});
+    $('p').value = '';
+    await showApp();
+  } catch (x) { $('authErr').textContent = x.message; }
+  $('authBtn').disabled = false;
+};
+$('logout').onclick = async () => { await api('POST', '/api/logout').catch(() => {}); showAuth(); };
+
+function showAuth() {
+  clearInterval(timer);
+  $('app').hidden = true; $('auth').hidden = false; setMode('login');
+}
+
+// ---------- uygulama ----------
+function initMap() {
+  if (map) return;
+  map = L.map('map').setView([41.015, 28.979], 11);
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom:19, attribution:'&copy; OpenStreetMap'}).addTo(map);
+  layer = L.layerGroup().addTo(map);
+  map.on('click', e => {
+    pick = {lat: +e.latlng.lat.toFixed(6), lon: +e.latlng.lng.toFixed(6)};
+    if (pickMarker) pickMarker.setLatLng(e.latlng); else pickMarker = L.marker(e.latlng, {opacity:.6}).addTo(map);
+    openAddForm();
   });
-  if (!r.ok) { $('status').textContent = 'Kaydedilemedi: ' + ((await r.json()).error || r.status); return; }
-  pick = null; render(await r.json(), true);
-  setTimeout(refresh, 3000);
+}
+
+function scheduleEditor(init, saveLabel, onSave) {
+  const start = el('input', {type:'time', value: init.window_start || ''});
+  const end = el('input', {type:'time', value: init.window_end || ''});
+  const name = el('input', {placeholder:'Nokta adı (isteğe bağlı)', maxLength:80, value: init.name || ''});
+  const days = DAYS.map((d, i) => el('input', {type:'checkbox', checked: (init.days || [0,1,2,3,4,5,6]).includes(i)}));
+  const msg = el('div', {className:'err'});
+  const save = el('button', {textContent: saveLabel});
+  save.onclick = async () => {
+    save.disabled = true; msg.textContent = '';
+    try { await onSave({name: name.value, start: start.value, end: end.value,
+      days: days.map((c, i) => c.checked ? i : -1).filter(i => i >= 0)}); }
+    catch (x) { msg.textContent = x.message; }
+    save.disabled = false;
+  };
+  return el('div', {className:'sched'}, name,
+    el('div', {className:'row'}, el('label', {}, 'Başlangıç ', start), el('label', {}, 'Bitiş ', end)),
+    el('div', {className:'muted'}, 'Saatleri boş bırakırsan her saat bildirim gelir.'),
+    el('div', {className:'row'}, days.map((c, i) => el('label', {}, c, DAYS[i]))),
+    msg, save);
+}
+
+function openAddForm() {
+  $('hint').hidden = true; $('addBox').hidden = false;
+  $('addForm').replaceChildren(scheduleEditor({}, 'Noktayı ekle', async v => {
+    await api('POST', '/api/points', {...pick, ...v});
+    closeAddForm(); await loadPoints(true);
+  }));
+}
+function closeAddForm() {
+  pick = null; if (pickMarker) { map.removeLayer(pickMarker); pickMarker = null; }
+  $('addBox').hidden = true; $('hint').hidden = false;
+}
+
+function summary(p) {
+  const w = p.window_start ? `${p.window_start}–${p.window_end}` : 'her saat';
+  const d = p.days.length === 7 ? 'her gün' : p.days.map(i => DAYS[i]).join(', ');
+  return `${w}, ${d}` + (p.active ? '' : ' · şu an aralık dışında');
+}
+function statusText(p) {
+  const l = p.last;
+  if (!l) return 'İlk ölçüm bekleniyor…';
+  if (l.error) return '⚠️ Ölçüm hatası: ' + l.error;
+  let s = `${ICON[l.level]} ${l.label} · ${Math.round(l.current_speed)}/${Math.round(l.free_flow_speed)} km/s · ` +
+    `~${Math.floor(l.delay_s / 60)} dk gecikme · ${new Date(l.checked_at).toLocaleTimeString('tr-TR')}`;
+  if (l.notify_error) s += '\n⚠️ Telegram: ' + l.notify_error;
+  return s;
+}
+
+function renderPoints(recenter) {
+  layer.clearLayers(); markers = {};
+  const box = $('points');
+  if (!points.length) { box.replaceChildren(el('div', {className:'muted'}, 'Henüz nokta eklemedin.')); return; }
+  box.replaceChildren(...points.map(p => {
+    const title = p.name || `${p.lat.toFixed(4)}, ${p.lon.toFixed(4)}`;
+    const m = L.marker([p.lat, p.lon], {title}).addTo(layer);
+    markers[p.id] = m;
+    const editHost = el('div', {hidden:true});
+    const status = el('div', {className:'muted', textContent: statusText(p)});
+    status.style.whiteSpace = 'pre-line';
+    const t = el('div', {className:'title', textContent: title});
+    t.onclick = () => map.setView([p.lat, p.lon], 16);
+    const edit = el('button', {className:'ghost', textContent:'Düzenle'});
+    edit.onclick = () => {
+      editHost.hidden = !editHost.hidden;
+      if (!editHost.hidden) editHost.replaceChildren(scheduleEditor(p, 'Kaydet', async v => {
+        await api('PATCH', '/api/points/' + p.id, v); await loadPoints();
+      }));
+    };
+    const del = el('button', {className:'danger', textContent:'Sil'});
+    del.onclick = async () => {
+      if (!confirm(`"${title}" silinsin mi?`)) return;
+      await api('DELETE', '/api/points/' + p.id).catch(x => alert(x.message)); await loadPoints();
+    };
+    return el('div', {className:'point'}, t, status, el('div', {className:'muted', textContent: summary(p)}),
+      el('div', {className:'actions'}, edit, del), editHost);
+  }));
+  if (recenter) {
+    const g = L.featureGroup(Object.values(markers));
+    map.fitBounds(g.getBounds().pad(0.3), {maxZoom: 15});
+  }
+}
+
+let firstLoad = true;
+async function loadPoints(recenter) {
+  points = (await api('GET', '/api/points')).points;
+  renderPoints(recenter || firstLoad);
+  firstLoad = false;
+}
+
+$('saveChat').onclick = async () => {
+  try { const r = await api('POST', '/api/telegram', {chat_id: $('chat').value}); $('chatMsg').textContent = r.chat_id ? '✅ Kaydedildi' : 'Chat id silindi'; }
+  catch (x) { $('chatMsg').textContent = x.message; }
+};
+$('testChat').onclick = async () => {
+  $('chatMsg').textContent = 'Gönderiliyor…';
+  try { await api('POST', '/api/telegram/test'); $('chatMsg').textContent = '✅ Test mesajı gönderildi, Telegram\'ı kontrol et'; }
+  catch (x) { $('chatMsg').textContent = '⚠️ ' + x.message; }
 };
 
-const DAYS = ['Pzt','Sal','Çar','Per','Cum','Cmt','Paz'];
-DAYS.forEach((d, i) => { $('days').insertAdjacentHTML('beforeend', `<label><input type="checkbox" data-d="${i}" checked> ${d}</label>`); });
-let schedLoaded = false;
-
-async function postSchedule(start, end, days) {
-  const r = await fetch('/api/schedule', {method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({start, end, days})});
-  const j = await r.json();
-  if (!r.ok) { $('schedInfo').textContent = 'Kaydedilemedi: ' + j.error; return; }
-  schedLoaded = false; render(j, false);
-}
-$('saveSched').onclick = () => postSchedule($('start').value, $('end').value,
-  [...document.querySelectorAll('#days input')].filter(c => c.checked).map(c => +c.dataset.d));
-$('clearSched').onclick = () => postSchedule('', '', []);
-
-function renderSchedule(s) {
-  if (!schedLoaded) {
-    $('start').value = s.window_start; $('end').value = s.window_end;
-    document.querySelectorAll('#days input').forEach(c => c.checked = s.days.includes(+c.dataset.d));
-    schedLoaded = true;
-  }
-  const w = s.window_start ? `${s.window_start}–${s.window_end}` : 'her saat';
-  const dd = s.days.length === 7 ? 'her gün' : s.days.map(i => DAYS[i]).join(', ');
-  $('schedInfo').textContent = `Aktif aralık: ${w}, ${dd} (${s.timezone}). ` +
-    (s.active ? 'Şu an aralık içinde.' : 'Şu an aralık dışında, mesaj gönderilmiyor.');
+async function showApp() {
+  const me = await api('GET', '/api/me');
+  $('auth').hidden = true; $('app').hidden = false;
+  $('who').textContent = '👤 ' + me.username;
+  $('chat').value = me.chat_id;
+  initMap(); map.invalidateSize();
+  firstLoad = true;
+  await loadPoints();
+  clearInterval(timer);
+  timer = setInterval(() => {
+    // açık bir düzenleme formu varsa yenileme yapma (yazılanlar kaybolmasın)
+    if (!document.querySelector('#points .sched')) loadPoints().catch(() => {});
+  }, 30000);
 }
 
-function render(s, recenter) {
-  renderSchedule(s);
-  if (s.lat == null) { $('status').textContent = 'Henüz nokta seçilmedi'; return; }
-  saved = s; place(s.lat, s.lon);
-  if (recenter) map.setView([s.lat, s.lon], 15);
-  const title = s.name || `${s.lat.toFixed(4)}, ${s.lon.toFixed(4)}`;
-  const l = s.last;
-  if (!l) { $('status').textContent = `İzleniyor: ${title}`; $('detail').textContent = 'İlk ölçüm bekleniyor…'; }
-  else if (l.error) { $('status').textContent = `${title}: ölçüm hatası`; $('detail').textContent = l.error; }
-  else {
-    $('status').textContent = `${ICON[l.level]} ${l.label} — ${title}`;
-    $('detail').textContent = `${Math.round(l.current_speed)} km/s (normalde ${Math.round(l.free_flow_speed)}) · ` +
-      `~${Math.floor(l.delay_s/60)} dk gecikme · ${s.interval/60} dk'da bir kontrol · ${new Date(l.checked_at).toLocaleTimeString('tr-TR')}`;
-    if (l.notify_error) $('detail').textContent += `\n⚠️ Telegram mesajı gönderilemedi: ${l.notify_error}`;
-  }
-}
-
-async function refresh() {
-  try { render(await (await fetch('/api/status')).json(), !saved); } catch (e) {}
-}
-refresh(); setInterval(refresh, 30000);
+(async () => {
+  cfg = await fetch('/api/config').then(r => r.json()).catch(() => ({}));
+  try { await showApp(); } catch (e) { showAuth(); }
+})();
 </script>
 </body>
 </html>
