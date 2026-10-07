@@ -6,7 +6,8 @@ import sys
 import threading
 import time
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 import requests
 
@@ -32,6 +33,11 @@ class Config:
     state_path: str = "data/state.json"
     yogun_esik: float = 0.40  # güncel hız / serbest akış hızı bunun altındaysa sıkışık
     orta_esik: float = 0.70
+    # Bildirim saat aralığı ("HH:MM"); ikisi de boşsa her zaman aktif. Gece aşan aralık (22:00-06:00) desteklenir.
+    window_start: str = ""
+    window_end: str = ""
+    days: tuple = (0, 1, 2, 3, 4, 5, 6)  # 0=Pazartesi
+    timezone: str = "Europe/Istanbul"
 
     @classmethod
     def from_env(cls) -> "Config":
@@ -54,7 +60,56 @@ class Config:
             name=os.environ.get("TRAFIK_NAME", ""),
             yogun_esik=float(os.environ.get("YOGUN_ESIK", "0.40")),
             orta_esik=float(os.environ.get("ORTA_ESIK", "0.70")),
+            window_start=os.environ.get("NOTIFY_START", ""),
+            window_end=os.environ.get("NOTIFY_END", ""),
+            days=parse_days(os.environ.get("NOTIFY_DAYS", "")),
+            timezone=os.environ.get("TIMEZONE", "Europe/Istanbul"),
         )
+
+
+def parse_days(v) -> tuple:
+    """"0,1,2" veya [0,1,2] -> sıralı tuple; boş = her gün."""
+    items = v.split(",") if isinstance(v, str) else v
+    days = sorted({int(x) for x in items if str(x).strip() != ""})
+    if any(d < 0 or d > 6 for d in days):
+        raise ValueError("Gün değerleri 0-6 olmalı")
+    return tuple(days) if days else (0, 1, 2, 3, 4, 5, 6)
+
+
+def _minutes(hhmm: str) -> int:
+    h, m = hhmm.split(":")
+    if not (0 <= int(h) <= 23 and 0 <= int(m) <= 59):
+        raise ValueError("Geçersiz saat")
+    return int(h) * 60 + int(m)
+
+
+def validate_window(start: str, end: str) -> None:
+    if bool(start) != bool(end):
+        raise ValueError("Başlangıç ve bitiş saatinin ikisi de girilmeli (ya da ikisi de boş)")
+    if not start:
+        return
+    try:
+        a, b = _minutes(start), _minutes(end)
+    except ValueError:
+        raise ValueError("Saat HH:MM biçiminde olmalı") from None
+    if a == b:
+        raise ValueError("Başlangıç ve bitiş aynı olamaz")
+
+
+def in_window(cfg: "Config", now: datetime | None = None) -> bool:
+    """Şu an bildirim aralığında mı? Gece aşan aralıkta gün, aralığın başladığı güne göre sayılır."""
+    now = (now or datetime.now(timezone.utc)).astimezone(ZoneInfo(cfg.timezone))
+    cur = now.hour * 60 + now.minute
+    if not cfg.window_start:
+        return now.weekday() in cfg.days
+    start, end = _minutes(cfg.window_start), _minutes(cfg.window_end)
+    if start < end:
+        return start <= cur < end and now.weekday() in cfg.days
+    if cur >= start:
+        return now.weekday() in cfg.days
+    if cur < end:
+        return (now - timedelta(days=1)).weekday() in cfg.days
+    return False
 
 
 @dataclass
@@ -134,9 +189,20 @@ class Monitor:
         try:
             with open(self.cfg.state_path) as f:
                 d = json.load(f)
+        except (OSError, ValueError):
+            return  # kayıtlı durum yok: env değerleri kullanılır
+        if "lat" in d and "lon" in d:
             self.cfg.lat, self.cfg.lon, self.cfg.name = d["lat"], d["lon"], d.get("name", "")
-        except (OSError, ValueError, KeyError):
-            pass  # kayıtlı konum yok: env değerleri (varsa) kullanılır
+        if "window_start" in d:
+            self.cfg.window_start, self.cfg.window_end = d["window_start"], d["window_end"]
+            self.cfg.days = parse_days(d.get("days", ""))
+
+    def _save_state(self) -> None:  # self.lock altında çağrılır
+        c = self.cfg
+        os.makedirs(os.path.dirname(c.state_path) or ".", exist_ok=True)
+        with open(c.state_path, "w") as f:
+            json.dump({"lat": c.lat, "lon": c.lon, "name": c.name, "window_start": c.window_start,
+                       "window_end": c.window_end, "days": list(c.days)}, f)
 
     def set_location(self, lat: float, lon: float, name: str = "") -> None:
         if not (-90 <= lat <= 90 and -180 <= lon <= 180):
@@ -144,17 +210,24 @@ class Monitor:
         with self.lock:
             self.cfg.lat, self.cfg.lon, self.cfg.name = lat, lon, name.strip()[:80]
             self.last = None
-            os.makedirs(os.path.dirname(self.cfg.state_path) or ".", exist_ok=True)
-            with open(self.cfg.state_path, "w") as f:
-                json.dump({"lat": lat, "lon": lon, "name": self.cfg.name}, f)
+            self._save_state()
         self.wake.set()  # hemen yeni noktayı ölç
+
+    def set_schedule(self, start: str, end: str, days) -> None:
+        validate_window(start, end)
+        days = parse_days(days)
+        with self.lock:
+            self.cfg.window_start, self.cfg.window_end, self.cfg.days = start, end, days
+            self._save_state()
+        self.wake.set()
 
     def status(self) -> dict:
         with self.lock:
             c = self.cfg
             return {
                 "lat": c.lat, "lon": c.lon, "name": c.name, "interval": c.interval,
-                "last": self.last,
+                "last": self.last, "window_start": c.window_start, "window_end": c.window_end,
+                "days": list(c.days), "timezone": c.timezone, "active": in_window(c),
             }
 
     def check_once(self) -> None:
@@ -162,6 +235,8 @@ class Monitor:
             if self.cfg.lat is None:
                 return
             cfg = Config(**{**self.cfg.__dict__})
+        if not in_window(cfg):
+            return  # bildirim saati dışında: ölçüm de yapılmaz (API kotası harcanmaz)
         now = datetime.now(timezone.utc).isoformat(timespec="seconds")
         try:
             flow = fetch_flow(cfg)

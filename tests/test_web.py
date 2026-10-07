@@ -29,3 +29,11 @@ def test_set_and_get_location(tmp_path, monkeypatch):
     assert c.post("/api/location", json={"lat": 200, "lon": 0}, headers=AUTH).status_code == 400
     assert c.post("/api/location", json={}, headers=AUTH).status_code == 400
     assert c.get("/", headers=AUTH).status_code == 200
+
+
+def test_schedule_endpoint(tmp_path, monkeypatch):
+    c = make_client(tmp_path, monkeypatch)
+    r = c.post("/api/schedule", json={"start": "07:00", "end": "10:00", "days": [0, 1]}, headers=AUTH)
+    assert r.status_code == 200 and r.json["window_start"] == "07:00" and r.json["days"] == [0, 1]
+    assert c.post("/api/schedule", json={"start": "07:00", "end": ""}, headers=AUTH).status_code == 400
+    assert c.post("/api/schedule", json={"start": "", "end": "", "days": []}, headers=AUTH).json["window_start"] == ""

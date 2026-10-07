@@ -17,6 +17,8 @@
   button { padding:8px 16px; border:0; border-radius:6px; background:#2563eb; color:#fff; font:inherit; cursor:pointer; }
   button:disabled { opacity:.5; cursor:default; }
   #status { font-weight:600; }
+  details summary { cursor:pointer; font-weight:600; }
+  label { display:flex; gap:6px; align-items:center; }
   .muted { color:var(--muted); font-size:13px; white-space:pre-line; }
 </style>
 </head>
@@ -29,6 +31,19 @@
     <input id="name" placeholder="Nokta adı (isteğe bağlı)" maxlength="80">
     <button id="save" disabled>Bu noktayı izle</button>
   </div>
+  <details id="sched">
+    <summary>Bildirim saatleri</summary>
+    <div class="row" style="margin-top:8px">
+      <label>Başlangıç <input type="time" id="start"></label>
+      <label>Bitiş <input type="time" id="end"></label>
+    </div>
+    <div class="row" id="days" style="margin-top:8px"></div>
+    <div class="row" style="margin-top:8px">
+      <button id="saveSched">Saatleri kaydet</button>
+      <button id="clearSched" style="background:#666">Her zaman</button>
+    </div>
+    <div class="muted" id="schedInfo"></div>
+  </details>
   <div class="muted">Haritaya tıklayarak izlenecek noktayı seç. Yolun üzerine tıkla.</div>
 </div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
@@ -63,7 +78,35 @@ $('save').onclick = async () => {
   setTimeout(refresh, 3000);
 };
 
+const DAYS = ['Pzt','Sal','Çar','Per','Cum','Cmt','Paz'];
+DAYS.forEach((d, i) => { $('days').insertAdjacentHTML('beforeend', `<label><input type="checkbox" data-d="${i}" checked> ${d}</label>`); });
+let schedLoaded = false;
+
+async function postSchedule(start, end, days) {
+  const r = await fetch('/api/schedule', {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({start, end, days})});
+  const j = await r.json();
+  if (!r.ok) { $('schedInfo').textContent = 'Kaydedilemedi: ' + j.error; return; }
+  schedLoaded = false; render(j, false);
+}
+$('saveSched').onclick = () => postSchedule($('start').value, $('end').value,
+  [...document.querySelectorAll('#days input')].filter(c => c.checked).map(c => +c.dataset.d));
+$('clearSched').onclick = () => postSchedule('', '', []);
+
+function renderSchedule(s) {
+  if (!schedLoaded) {
+    $('start').value = s.window_start; $('end').value = s.window_end;
+    document.querySelectorAll('#days input').forEach(c => c.checked = s.days.includes(+c.dataset.d));
+    schedLoaded = true;
+  }
+  const w = s.window_start ? `${s.window_start}–${s.window_end}` : 'her saat';
+  const dd = s.days.length === 7 ? 'her gün' : s.days.map(i => DAYS[i]).join(', ');
+  $('schedInfo').textContent = `Aktif aralık: ${w}, ${dd} (${s.timezone}). ` +
+    (s.active ? 'Şu an aralık içinde.' : 'Şu an aralık dışında, mesaj gönderilmiyor.');
+}
+
 function render(s, recenter) {
+  renderSchedule(s);
   if (s.lat == null) { $('status').textContent = 'Henüz nokta seçilmedi'; return; }
   saved = s; place(s.lat, s.lon);
   if (recenter) map.setView([s.lat, s.lon], 15);

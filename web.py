@@ -42,6 +42,16 @@ def set_location():
     return jsonify(monitor.status())
 
 
+@app.post("/api/schedule")
+def set_schedule():
+    d = request.get_json(silent=True) or {}
+    try:
+        monitor.set_schedule(str(d.get("start", "")), str(d.get("end", "")), d.get("days", []))
+    except (TypeError, ValueError) as e:
+        return jsonify(error=str(e) or "Geçersiz istek"), 400
+    return jsonify(monitor.status())
+
+
 def create_monitor() -> Monitor:
     global monitor
     monitor = Monitor(Config.from_env())

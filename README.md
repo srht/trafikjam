@@ -22,6 +22,10 @@ Test: `pytest`
 `python web.py` çalıştırıp `http://localhost:8000` adresini aç (`ADMIN_PASSWORD` ile basic auth; kullanıcı adı önemsiz).
 Haritaya tıkla, isteğe bağlı bir ad yaz, **Bu noktayı izle**'ye bas. Konum `STATE_PATH` dosyasına
 kaydedilir ve hemen ölçülür; sayfa mevcut durumu (hız, gecikme, son ölçüm) 30 sn'de bir yeniler.
+**Bildirim saatleri:** panelde "Bildirim saatleri" bölümünden başlangıç/bitiş saati ve günleri seçip kaydet
+(ör. 07:00–10:00, Pzt–Cum). Aralık dışında ölçüm de mesaj da yapılmaz, TomTom kotası harcanmaz.
+Gece aşan aralık (22:00–06:00) olur; "Her zaman" ile sınırı kaldırırsın. Saat dilimi `TIMEZONE` (varsayılan `Europe/Istanbul`).
+Başlangıç değerleri `NOTIFY_START`, `NOTIFY_END`, `NOTIFY_DAYS` env'leriyle de verilebilir; arayüzden kaydedilen değer onları geçersiz kılar.
 Konum seçilmemişse izleme başlamaz. `TRAFIK_LAT/LON` env değerleri yalnızca başlangıç noktasıdır.
 
 ## Dokploy ile yayınlama

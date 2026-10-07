@@ -13,6 +13,10 @@ services:
       TRAFIK_LAT: ${TRAFIK_LAT:-}
       TRAFIK_LON: ${TRAFIK_LON:-}
       TRAFIK_NAME: ${TRAFIK_NAME:-}
+      NOTIFY_START: ${NOTIFY_START:-}
+      NOTIFY_END: ${NOTIFY_END:-}
+      NOTIFY_DAYS: ${NOTIFY_DAYS:-}
+      TIMEZONE: ${TIMEZONE:-Europe/Istanbul}
     volumes:
       - trafikjam-data:/data
     expose:
