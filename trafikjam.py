@@ -32,7 +32,7 @@ class Settings:
     data_dir: str = "data"
     registration_code: str = ""  # doluysa kayıt için gerekli
     max_points: int = 5  # kullanıcı başına
-    cookie_secure: bool = True
+    cookie_secure: bool | None = None  # None: isteğin HTTPS olup olmadığına göre otomatik
 
     @property
     def db_path(self) -> str:
@@ -58,7 +58,7 @@ class Settings:
             data_dir=data_dir,
             registration_code=os.environ.get("REGISTRATION_CODE", ""),
             max_points=int(os.environ.get("MAX_POINTS_PER_USER", "5")),
-            cookie_secure=os.environ.get("COOKIE_SECURE", "1") != "0",
+            cookie_secure={"1": True, "0": False}.get(os.environ.get("COOKIE_SECURE", "")),
         )
 
 

@@ -98,3 +98,16 @@ def test_telegram_endpoints(app, monkeypatch):
     monkeypatch.setattr(web.t, "send_telegram", boom)
     r = c.post("/api/telegram/test", headers=H)
     assert r.status_code == 502 and "chat not found" in r.json["error"]
+
+
+def test_cookie_secure_follows_request_scheme(settings, store):
+    settings.cookie_secure = None  # otomatik
+    app = web.create_app(settings, store, StubMonitor())
+    body = {"username": "ali", "password": "sifre1234"}
+    r = app.test_client().post("/api/register", json=body, headers=H)
+    assert "Secure" not in r.headers["Set-Cookie"]  # düz HTTP: tarayıcı reddetmesin
+    r = app.test_client().post("/api/login", json=body, headers={**H, "X-Forwarded-Proto": "https"})
+    assert "Secure" in r.headers["Set-Cookie"]  # proxy arkasında HTTPS
+    settings.cookie_secure = True
+    r = web.create_app(settings, store, StubMonitor()).test_client().post("/api/login", json=body, headers=H)
+    assert "Secure" in r.headers["Set-Cookie"]  # zorlanmışsa HTTP'de de Secure

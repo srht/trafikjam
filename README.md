@@ -12,13 +12,13 @@ TomTom Traffic API ile periyodik ölçüp sahibine Telegram'dan bildiren web uyg
 ## Yerelde çalıştırma
 ```
 pip install -r requirements.txt
-cp .env.example .env   # TOMTOM_API_KEY, TELEGRAM_BOT_TOKEN doldur; yerelde COOKIE_SECURE=0 yap
+cp .env.example .env   # TOMTOM_API_KEY, TELEGRAM_BOT_TOKEN doldur
 python web.py          # http://localhost:8000
 pytest
 ```
 
 ## Güvenlik notları
-- Şifreler hash'li saklanır (werkzeug), oturum imzalı HttpOnly/SameSite çerezdir; HTTPS arkasında `Secure` işaretlenir.
+- Şifreler hash'li saklanır (werkzeug), oturum imzalı HttpOnly/SameSite çerezdir; istek HTTPS ise (proxy `X-Forwarded-Proto` ile) `Secure` işaretlenir.
 - Çok sayıda hatalı girişte 15 dk bloklanır; kayıt IP başına saatte 10 denemeyle sınırlıdır.
 - **Kayıt varsayılan olarak herkese açıktır.** TomTom kotası tüm kullanıcılar arasında ortaktır;
   yalnızca tanıdıklarının kullanması için `REGISTRATION_CODE` ayarla (davet kodu sorulur),

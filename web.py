@@ -9,6 +9,7 @@ from datetime import timedelta
 from functools import wraps
 
 from flask import Flask, jsonify, request, send_from_directory, session
+from flask.sessions import SecureCookieSessionInterface
 from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.security import check_password_hash, generate_password_hash
 
@@ -49,13 +50,24 @@ class Throttle:
             self.hits.pop(key, None)
 
 
+class AutoSecureSession(SecureCookieSessionInterface):
+    """Secure bayrağı: ayar verilmişse o, yoksa istek HTTPS ise (ProxyFix X-Forwarded-Proto'yu işler).
+    Böylece HTTP üzerinden girilirse tarayıcı çerezi reddetmez."""
+
+    def __init__(self, forced: bool | None):
+        self.forced = forced
+
+    def get_cookie_secure(self, app) -> bool:
+        return request.is_secure if self.forced is None else self.forced
+
+
 def create_app(settings: t.Settings, store: Store, monitor) -> Flask:
     app = Flask(__name__, static_folder="static", static_url_path="/static")
     app.secret_key = settings.secret_key
+    app.session_interface = AutoSecureSession(settings.cookie_secure)
     app.config.update(
         SESSION_COOKIE_HTTPONLY=True,
         SESSION_COOKIE_SAMESITE="Lax",
-        SESSION_COOKIE_SECURE=settings.cookie_secure,
         PERMANENT_SESSION_LIFETIME=timedelta(days=30),
         MAX_CONTENT_LENGTH=16 * 1024,
     )

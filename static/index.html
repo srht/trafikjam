@@ -133,7 +133,11 @@ $('authForm').onsubmit = async e => {
       {username: $('u').value, password: $('p').value, code: $('code').value});
     $('p').value = '';
     await showApp();
-  } catch (x) { $('authErr').textContent = x.message; }
+  } catch (x) {
+    // giriş başarılı ama oturum kurulamadıysa çerez tarayıcıda kaydedilmemiştir
+    $('authErr').textContent = x.message === 'Giriş gerekli'
+      ? 'Oturum açılamadı: tarayıcı çerezi kabul etmedi. Siteye HTTPS ile gir ve çerezlere izin ver.' : x.message;
+  }
   $('authBtn').disabled = false;
 };
 $('logout').onclick = async () => { await api('POST', '/api/logout').catch(() => {}); showAuth(); };
